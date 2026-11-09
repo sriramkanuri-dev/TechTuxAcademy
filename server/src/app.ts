@@ -20,6 +20,8 @@ import postRoutes from './routes/posts';
 import searchRoutes from './routes/search';
 import siteRoutes, { buildSitemap } from './routes/site';
 import adminRoutes from './routes/admin';
+import resourceRoutes from './routes/resources';
+import adminResourceRoutes from './routes/adminResources';
 import miscRoutes from './routes/misc';
 import uploadRoutes from './routes/uploads';
 
@@ -100,6 +102,8 @@ export function createApp() {
   app.use('/api/posts', postRoutes);
   app.use('/api', searchRoutes);
   app.use('/api/site', siteRoutes);
+  app.use('/api/resources', resourceRoutes);
+  app.use('/api/admin/resources', adminResourceRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api', miscRoutes);
   app.use('/api', uploadRoutes);

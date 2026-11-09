@@ -39,6 +39,11 @@ export const config = {
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   uploadDir: path.resolve(__dirname, '../uploads'),
   clientDist: path.resolve(__dirname, '../../client/dist'),
+  resourceStorageDir: path.resolve(
+    process.env.RESOURCE_STORAGE_DIR || path.resolve(__dirname, '../../storage')
+  ),
+  resourceFontDir: path.resolve(__dirname, '../assets/fonts'),
+  autoGenerateResources: process.env.AUTO_GENERATE_RESOURCES !== 'false',
 };
 
 if (isProd && config.jwtSecret.includes('dev-only')) {

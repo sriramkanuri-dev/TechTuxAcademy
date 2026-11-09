@@ -8,6 +8,16 @@ import { requireAdmin } from '../lib/auth';
 import { uniqueSlug } from '../lib/slug';
 import { extractYouTubeId } from '../lib/youtube';
 import { getCourseProgress, recomputeCourseDuration } from '../services/learning';
+import {
+  deleteCourseResourceFiles,
+  deleteLessonResourceFiles,
+  markCourseResourcesOutdated,
+  markLessonResourcesOutdated,
+} from '../services/resources/generator';
+import {
+  scheduleCourseGeneration,
+  scheduleLessonGeneration,
+} from '../services/resources/queue';
 
 const router = Router();
 

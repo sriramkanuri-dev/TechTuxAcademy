@@ -23,6 +23,18 @@ enum Difficulty {
   ADVANCED
 }
 
+enum ResourceType {
+  LESSON_NOTES
+  COMMAND_CHEATSHEET
+}
+
+enum ResourceStatus {
+  QUEUED
+  GENERATING
+  READY
+  FAILED
+}
+
 model User {
   id                       String    @id @default(cuid())
   name                     String
@@ -129,10 +141,36 @@ model Lesson {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  progress LessonProgress[]
+  course       Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress     LessonProgress[]
+  resourceFiles LessonResource[]
 
   @@index([courseId, order])
+}
+
+model LessonResource {
+  id           String         @id @default(cuid())
+  lessonId     String
+  resourceType ResourceType
+  fileName     String
+  storagePath  String
+  mimeType     String         @default("application/pdf")
+  fileSize     Int            @default(0)
+  version      Int            @default(1)
+  status       ResourceStatus @default(QUEUED)
+  outdated     Boolean        @default(false)
+  contentHash  String?
+  error        String?
+  generatedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, resourceType])
+  @@index([status])
+  @@index([outdated])
+  @@index([generatedAt])
 }
 
 model Enrollment {

@@ -10,6 +10,7 @@ server/uploads/*
 !server/uploads/.gitkeep
 server/.pgdata/
 server/prisma/dev.db*
+storage/
 *.dump
 *.sql.gz
 coverage/
