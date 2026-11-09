@@ -1,0 +1,4 @@
+# SPA fallback for React Router client-side routes (Cloudflare Pages).
+# Cloudflare Pages serves index.html for every unmatched route so that
+# /courses, /dashboard, /admin, /verify-certificate, etc. render the app.
+/* /index.html 200

@@ -367,6 +367,56 @@ techtuxacademy.online {
 
 Caddy provisions HTTPS automatically. Point the domain's DNS `A`/`AAAA` records at the server first.
 
+### Cloudflare Pages (static SPA hosting)
+
+Cloudflare Pages hosts the **static React + Vite frontend**; the Express API is a
+separate project and stays untouched. Because this is an npm-workspaces
+monorepo, the Pages build runs only the `client` workspace and uploads
+`client/dist`. This is a **Git-integration deployment** — Cloudflare builds on
+every push to `main`, and you do **not** run `wrangler deploy` (that command is
+for Workers, not Pages).
+
+1. Create a Cloudflare Pages project and connect the `TechTuxAcademy` GitHub
+   repository (the same repo used for Hostinger).
+2. In the dashboard, under **Build & deploy**:
+   - **Framework preset:** `Vite` (or `None`)
+   - **Build command:** `npm ci && npm run build -w client`
+   - **Build output directory:** `client/dist`
+
+3. Add a `wrangler.toml` at the repository root:
+
+   ```toml
+   # Cloudflare Pages configuration for the TechTuxAcademy frontend.
+   name = "techtuxacademy"
+   main = "client/dist/index.html"
+   compatibility_date = "2026-11-01"
+
+   [build]
+   command = "npm ci && npm run build -w client"
+
+   pages_build_output_dir = "client/dist"
+   ```
+
+   `main` points at the built SPA entrypoint; `pages_build_output_dir` is the
+   `client/dist` Vite output.
+
+4. Add an SPA fallback rule. Create `client/public/_redirects` (Vite copies it to
+   `client/dist/_redirects`):
+
+   ```
+   /* /index.html 200
+   ```
+
+5. Set the API URL at build time. The frontend sends session cookies (no tokens
+   in the bundle), so `VITE_API_URL` is **not** a secret. In the Cloudflare Pages
+   dashboard, go to **Settings → Environment variables** and add:
+
+   | Variable | Value |
+   | --- | --- |
+   | `VITE_API_URL` | `https://api.techtuxacademy.online` |
+
+   See `client/.env.example` for the template.
+
 ### Post-deploy checklist
 
 - [ ] `NODE_ENV=production` and a strong `JWT_SECRET`

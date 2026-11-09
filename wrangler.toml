@@ -1,0 +1,19 @@
+# Cloudflare Pages configuration for the TechTuxAcademy frontend.
+#
+# The React + Vite SPA is hosted on Cloudflare Pages. The Express API is a
+# separate project and is NOT part of this Pages deployment.
+#
+# Deployment model: Git integration (GitHub). Cloudflare builds the frontend
+# from source on every push to `main`. There is no `wrangler deploy` command
+# for this Pages site — `wrangler deploy` targets Workers, not Pages.
+
+name = "techtuxacademy"
+main = "client/dist/index.html"
+compatibility_date = "2026-11-01"
+
+# Build the monorepo's client workspace with the root npm workspace scripts.
+[build]
+command = "npm ci && npm run build -w client"
+
+# Vite writes to client/dist, so Pages uploads that directory as the site.
+pages_build_output_dir = "client/dist"
