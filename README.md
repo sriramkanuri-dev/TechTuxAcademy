@@ -417,6 +417,40 @@ for Workers, not Pages).
 
    See `client/.env.example` for the template.
 
+### Render (Express backend)
+
+Render hosts the **Express + Prisma + PostgreSQL backend** (`server/`). The
+React frontend remains on Cloudflare Pages. Render provisions a managed
+PostgreSQL database and wires the connection string automatically via the
+`render.yaml` Blueprint.
+
+1. Sign up at https://render.com and link your GitHub repository
+   `sriramkanuri-dev/TechTuxAcademy` (the same repo used for Cloudflare Pages).
+2. In the Render dashboard, go to **New +** → **Blueprint** and confirm Render
+   imported `render.yaml`. Render creates:
+   - a Web Service (`techtux-api`) with `runtime: node`, and
+   - a managed PostgreSQL database (`techtuxdb`).
+3. Review the build/deploy settings:
+   - **Build command:** `npm ci && npm run build` (install deps → `prisma generate`
+     → `tsc -p tsconfig.json` → `server/dist`)
+   - **Start command:** `npm run migrate && npm start` where `migrate` is
+     `prisma migrate deploy`, then `node server/dist/index.js`
+4. Under **Environment**, verify the key variables:
+   - `NODE_ENV=production`, `PORT=10000` (Render default listening port)
+   - `JWT_SECRET` — rendered random on creation (`generateValue: true`), never
+     committed.
+   - `DATABASE_URL` / `DIRECT_URL` — wired from `techtuxdb` via `fromDatabase`.
+     If you enable PgBouncer, point `DATABASE_URL` at the pooled connection and
+     keep `DIRECT_URL` as the internal URL.
+   - `COOKIE_DOMAIN=.techtuxacademy.online` and `COOKIE_SAMESITE=none`
+     (so the `httpOnly` session cookie is sent across subdomains),
+   - `CORS_ORIGINS=https://techtuxacademy.online`, `CLIENT_URL`,
+     `API_URL=https://api.techtuxacademy.online`
+   - SMTP vars left empty unless you configure mail.
+5. **Deploy.** Watch the build logs for `npm ci`, `prisma generate`, `tsc -p
+   tsconfig.json`, `prisma migrate deploy`, and `node server/dist/index.js`.
+6. Verify the API is live: `GET /api/health` returns `{"status":"ok",...}`.
+
 ### Post-deploy checklist
 
 - [ ] `NODE_ENV=production` and a strong `JWT_SECRET`
