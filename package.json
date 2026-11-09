@@ -1,0 +1,33 @@
+{
+  "name": "techtuxacademy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TechTuxAcademy — Learn. Build. Innovate. Full-stack technology learning platform.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "start": "npm run start -w server",
+    "db:start": "npm run db:start -w server",
+    "db:stop": "npm run db:stop -w server",
+    "db:generate": "npm run db:generate -w server",
+    "db:migrate": "npm run db:migrate -w server",
+    "db:deploy": "npm run db:deploy -w server",
+    "db:seed": "npm run db:seed -w server",
+    "test:api": "npm run test:api -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "overrides": {
+    "@types/express": "^4.17.25",
+    "@types/express-serve-static-core": "^4.19.9"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

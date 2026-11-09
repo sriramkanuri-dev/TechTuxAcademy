@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+server/.pgdata
+server/uploads/*
+!server/uploads/.gitkeep
+.env
+.env.*
+!.env.example
+*.log
+.git
+.gitignore
+coverage
+.vite

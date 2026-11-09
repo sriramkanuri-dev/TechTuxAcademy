@@ -1,0 +1,65 @@
+# TechTuxAcademy — Nginx reverse proxy example.
+#
+# Assumes the Node app (built client + API) listens on 127.0.0.1:4000.
+# Obtain TLS certificates first (e.g. with certbot) and adjust the paths.
+#
+# Copy to /etc/nginx/sites-available/techtuxacademy and symlink into
+# /etc/nginx/sites-enabled/, then run: nginx -t && systemctl reload nginx
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name techtuxacademy.online www.techtuxacademy.online;
+
+    # Redirect all HTTP traffic to HTTPS.
+    return 301 https://techtuxacademy.online$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name techtuxacademy.online www.techtuxacademy.online;
+
+    ssl_certificate     /etc/letsencrypt/live/techtuxacademy.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/techtuxacademy.online/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # Security headers (the app also sets these via Helmet; keep the proxy minimal).
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    client_max_body_size 10m;
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript application/xml image/svg+xml;
+    gzip_min_length 1024;
+
+    # Hashed build assets can be cached aggressively.
+    location /assets/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_set_header Host $host;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Uploaded images.
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_set_header Host $host;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    # API and everything else go to the Node app.
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}

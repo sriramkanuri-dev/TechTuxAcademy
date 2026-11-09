@@ -1,0 +1,295 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Optional: direct (non-pooled) connection used by Prisma Migrate.
+  // Required only when DATABASE_URL points at a connection pooler.
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model User {
+  id                       String    @id @default(cuid())
+  name                     String
+  email                    String    @unique
+  passwordHash             String?
+  role                     Role      @default(STUDENT)
+  avatar                   String?
+  bio                      String?
+  bioTe                    String?
+  preferredLanguage        String    @default("en")
+  emailVerified            Boolean   @default(false)
+  emailVerificationToken   String?   @unique
+  emailVerificationExpires DateTime?
+  passwordResetToken       String?   @unique
+  passwordResetExpires     DateTime?
+  googleId                 String?   @unique
+  disabled                 Boolean   @default(false)
+  lastLoginAt              DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  courses       Course[]         @relation("InstructorCourses")
+  enrollments   Enrollment[]
+  lessonProgress LessonProgress[]
+  certificates  Certificate[]
+  tutorials     Tutorial[]       @relation("TutorialAuthor")
+  posts         BlogPost[]       @relation("PostAuthor")
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model Category {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  nameTe        String?
+  description   String
+  descriptionTe String?
+  icon          String   @default("Cpu")
+  color         String   @default("#8b5cf6")
+  order         Int      @default(0)
+  featured      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  courses   Course[]
+  tutorials Tutorial[]
+  posts     BlogPost[]
+
+  @@index([order])
+}
+
+model Course {
+  id                  String     @id @default(cuid())
+  slug                String     @unique
+  title               String
+  titleTe             String?
+  description         String
+  descriptionTe       String?
+  longDescription     String?
+  longDescriptionTe   String?
+  thumbnail           String?
+  difficulty          Difficulty @default(BEGINNER)
+  durationMinutes     Int        @default(0)
+  language            String     @default("en")
+  published           Boolean    @default(false)
+  featured            Boolean    @default(false)
+  certificateThreshold Int       @default(100)
+  objectives          String[]   @default([])
+  objectivesTe        String[]   @default([])
+  tags                String[]   @default([])
+  requirements        String[]   @default([])
+  categoryId          String
+  instructorId        String
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  instructor   User          @relation("InstructorCourses", fields: [instructorId], references: [id], onDelete: Restrict)
+  lessons      Lesson[]
+  enrollments  Enrollment[]
+  certificates Certificate[]
+
+  @@index([categoryId])
+  @@index([instructorId])
+  @@index([published, featured])
+  @@index([difficulty])
+}
+
+model Lesson {
+  id              String   @id @default(cuid())
+  courseId        String
+  title           String
+  titleTe         String?
+  description     String?
+  descriptionTe   String?
+  youtubeUrl      String
+  youtubeId       String
+  durationMinutes Int      @default(0)
+  order           Int      @default(0)
+  isPreview       Boolean  @default(false)
+  resources       Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress LessonProgress[]
+
+  @@index([courseId, order])
+}
+
+model Enrollment {
+  id             String    @id @default(cuid())
+  userId         String
+  courseId       String
+  enrolledAt     DateTime  @default(now())
+  lastAccessedAt DateTime  @default(now())
+  completedAt    DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([userId])
+}
+
+model LessonProgress {
+  id             String    @id @default(cuid())
+  userId         String
+  lessonId       String
+  completed      Boolean   @default(false)
+  completedAt    DateTime?
+  lastWatchedAt  DateTime  @default(now())
+  secondsWatched Int       @default(0)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId, lastWatchedAt])
+}
+
+model Tutorial {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  titleTe     String?
+  excerpt     String
+  excerptTe   String?
+  content     String
+  contentTe   String?
+  image       String?
+  categoryId  String
+  authorId    String
+  published   Boolean  @default(false)
+  featured    Boolean  @default(false)
+  readMinutes Int      @default(5)
+  language    String   @default("en")
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  author   User     @relation("TutorialAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+  @@index([published, featured])
+}
+
+model BlogPost {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  titleTe     String?
+  excerpt     String
+  excerptTe   String?
+  content     String
+  contentTe   String?
+  coverImage  String?
+  categoryId  String?
+  authorId    String
+  published   Boolean   @default(false)
+  featured    Boolean   @default(false)
+  readMinutes Int       @default(6)
+  language    String    @default("en")
+  tags        String[]  @default([])
+  publishedAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author   User      @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+  @@index([published, publishedAt])
+}
+
+model Certificate {
+  id               String    @id @default(cuid())
+  certificateId    String    @unique
+  userId           String
+  courseId         String
+  issuedAt         DateTime  @default(now())
+  revoked          Boolean   @default(false)
+  revokedAt        DateTime?
+  revocationReason String?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  name      String
+  role      String
+  quote     String
+  quoteTe   String?
+  avatar    String?
+  rating    Int      @default(5)
+  featured  Boolean  @default(true)
+  published Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  messageTe String?
+  type      String   @default("info")
+  active    Boolean  @default(true)
+  link      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}
+
+model SiteSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([handled])
+}

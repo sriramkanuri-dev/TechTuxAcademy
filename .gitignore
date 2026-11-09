@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+server/uploads/*
+!server/uploads/.gitkeep
+server/.pgdata/
+server/prisma/dev.db*
+*.dump
+*.sql.gz
+coverage/
+.vite/

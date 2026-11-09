@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: 248 250 252;
+    --surface: 255 255 255;
+    --card: 255 255 255;
+    --elevated: 241 245 249;
+    --text: 15 23 42;
+    --muted: 71 85 105;
+    --line: 15 23 42;
+  }
+
+  .dark {
+    --bg: 6 6 11;
+    --surface: 11 11 18;
+    --card: 15 15 24;
+    --elevated: 21 21 33;
+    --text: 241 245 249;
+    --muted: 148 163 184;
+    --line: 255 255 255;
+  }
+
+  * {
+    border-color: rgb(var(--line) / 0.1);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    background-image: radial-gradient(circle at 15% -10%, rgba(139, 92, 246, 0.1), transparent 38%),
+      radial-gradient(circle at 85% 0%, rgba(34, 211, 238, 0.06), transparent 30%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgba(139, 92, 246, 0.35);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgb(var(--bg));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line) / 0.15);
+    border-radius: 999px;
+    border: 2px solid rgb(var(--bg));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--line) / 0.28);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-tight;
+  }
+
+  [lang='te'],
+  .font-telugu {
+    font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid #a78bfa;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .gradient-text {
+    @apply bg-brand-gradient bg-clip-text text-transparent;
+  }
+
+  .glass {
+    @apply border border-line/10 bg-card/70 backdrop-blur-xl;
+  }
+
+  .card-surface {
+    @apply rounded-2xl border border-line/10 bg-card shadow-card;
+  }
+
+  .card-hover {
+    @apply transition duration-300 hover:-translate-y-1 hover:border-brand-400/40 hover:shadow-glow;
+  }
+
+  .bg-grid {
+    background-image: linear-gradient(to right, rgb(var(--line) / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--line) / 0.05) 1px, transparent 1px);
+    background-size: 52px 52px;
+  }
+
+  .bg-dots {
+    background-image: radial-gradient(rgb(var(--line) / 0.14) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .section {
+    @apply py-20 sm:py-24;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-brand-400/25 bg-brand-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-300;
+  }
+
+  .input-base {
+    @apply w-full rounded-xl border border-line/10 bg-surface/80 px-4 py-2.5 text-sm text-text placeholder:text-muted/60 transition focus:border-brand-400/60 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  .label-base {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  .link-muted {
+    @apply text-muted transition hover:text-text;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-line/10;
+  }
+
+  .hljs {
+    background: transparent !important;
+  }
+}
+
+/* Markdown / article typography */
+.prose-tech {
+  @apply text-[15px] leading-7 text-muted;
+}
+.prose-tech > * + * {
+  @apply mt-4;
+}
+.prose-tech h2 {
+  @apply mt-10 mb-3 text-2xl font-semibold text-text;
+}
+.prose-tech h3 {
+  @apply mt-8 mb-2 text-xl font-semibold text-text;
+}
+.prose-tech h4 {
+  @apply mt-6 mb-2 text-lg font-semibold text-text;
+}
+.prose-tech p {
+  @apply leading-7;
+}
+.prose-tech strong {
+  @apply font-semibold text-text;
+}
+.prose-tech a {
+  @apply font-medium text-brand-300 underline decoration-brand-400/40 underline-offset-4 transition hover:text-brand-200;
+}
+.prose-tech ul {
+  @apply list-disc space-y-2 pl-5;
+}
+.prose-tech ol {
+  @apply list-decimal space-y-2 pl-5;
+}
+.prose-tech blockquote {
+  @apply rounded-r-xl border-l-2 border-brand-400 bg-brand-500/5 px-4 py-3 text-text/80;
+}
+.prose-tech :not(pre) > code {
+  @apply rounded-md border border-line/10 bg-elevated px-1.5 py-0.5 font-mono text-[0.85em] text-brand-200;
+}
+.prose-tech pre {
+  @apply overflow-x-auto rounded-xl border border-line/10 bg-[#0b0b13] p-4 font-mono text-[13px] leading-6 text-slate-200;
+}
+.prose-tech pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+.prose-tech img {
+  @apply rounded-xl border border-line/10;
+}
+.prose-tech table {
+  @apply w-full border-collapse overflow-hidden rounded-lg text-sm;
+}
+.prose-tech th {
+  @apply border border-line/10 bg-elevated px-3 py-2 text-left font-semibold text-text;
+}
+.prose-tech td {
+  @apply border border-line/10 px-3 py-2;
+}
+.prose-tech hr {
+  @apply my-8 border-line/10;
+}
+
+/* highlight.js token palette */
+.hljs-comment,
+.hljs-quote {
+  color: #64748b;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: #c084fc;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #34d399;
+}
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name {
+  color: #fbbf24;
+}
+.hljs-title,
+.hljs-section,
+.hljs-function .hljs-title {
+  color: #60a5fa;
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: #22d3ee;
+}
+.hljs-type,
+.hljs-class .hljs-title {
+  color: #f472b6;
+}
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #a78bfa;
+}
+.hljs-deletion {
+  color: #f87171;
+}
+.hljs-meta {
+  color: #94a3b8;
+}
