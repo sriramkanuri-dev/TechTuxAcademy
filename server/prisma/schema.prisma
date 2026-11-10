@@ -50,6 +50,7 @@ model User {
   emailVerificationExpires DateTime?
   passwordResetToken       String?   @unique
   passwordResetExpires     DateTime?
+  passwordChangedAt        DateTime?
   googleId                 String?   @unique
   disabled                 Boolean   @default(false)
   lastLoginAt              DateTime?

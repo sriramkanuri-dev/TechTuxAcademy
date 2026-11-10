@@ -25,3 +25,16 @@ export const formLimiter = make(
   20,
   'Too many submissions. Please wait a few minutes and try again.'
 );
+
+/** Password reset requests are deliberately tighter than general auth traffic. */
+export const forgotPasswordLimiter = make(
+  15 * 60 * 1000,
+  5,
+  'Too many password reset requests. Please wait a few minutes and try again.'
+);
+
+export const resetPasswordLimiter = make(
+  15 * 60 * 1000,
+  10,
+  'Too many password reset attempts. Please wait a few minutes and try again.'
+);

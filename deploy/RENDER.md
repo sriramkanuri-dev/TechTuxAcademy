@@ -133,20 +133,55 @@ Do **not** set `VITE_API_URL`; the client uses the relative `/api` base.
 
 ---
 
-## 4. Create the first admin
+## 4. Create the first admin and configure email
 
-Do **not** run `npm run db:seed` in production. Instead:
+Do **not** run `npm run db:seed` in production. Instead, bootstrap the primary
+administrator from a machine that can reach the production database, using the
+pooled `DATABASE_URL` from Render:
 
-1. Register an account through the site (`/register`).
-2. In **Supabase → SQL Editor**, promote it:
+```bash
+ADMIN_EMAIL=sriramkanuri4@gmail.com ADMIN_NAME="Sriram Kanuri" \
+  npm run admin:set -w server
+```
 
-   ```sql
-   UPDATE "User" SET role = 'ADMIN' WHERE email = 'you@example.com';
-   ```
+The script either promotes the existing account (no duplicate) or creates it with
+the `ADMIN` role. When `ADMIN_PASSWORD` is omitted a random password is generated
+and **not printed**; set your own through **Forgot password?** on the login page.
+Sign in at `/admin` afterwards.
 
-   (Table names are Prisma's PascalCase defaults.)
+Alternatively, register through `/register` and promote in **Supabase → SQL
+Editor**:
 
-3. Sign in at `/admin`.
+```sql
+UPDATE "User" SET role = 'ADMIN' WHERE email = 'you@example.com';
+```
+
+### Gmail SMTP
+
+Add these under **Environment** (never commit them):
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=sriramkanuri4@gmail.com
+SMTP_PASS=<Google App Password>
+MAIL_FROM=sriramkanuri4@gmail.com
+PUBLIC_SITE_URL=https://techtuxacademy.online
+```
+
+`EMAIL_FROM` is accepted as an alias for `MAIL_FROM`. A Google App Password
+requires 2-Step Verification on the account; a normal Gmail password is rejected
+with `535-5.7.8`. Verify the transport without exposing the secret:
+
+```bash
+npm run mail:verify -w server
+```
+
+Password reset links use `PUBLIC_SITE_URL`. If the canonical domain still
+redirects to the root of `*.pages.dev` (dropping the path), point
+`PUBLIC_SITE_URL` at the working host until the redirect is fixed, otherwise the
+emailed link will not reach `/reset-password`.
 
 If you seed a private staging environment, set strong `SEED_ADMIN_PASSWORD` /
 `SEED_STUDENT_PASSWORD` values and keep `ALLOW_PROD_SEED=false` everywhere else.
@@ -198,6 +233,9 @@ The queue runs in the background so the API stays responsive.
 - [ ] `CORS_ORIGINS` includes the canonical site and preview hosts
 - [ ] Login, enrolment, lesson completion and certificate PDF work end-to-end
 - [ ] First admin promoted; `ALLOW_PROD_SEED=false`
+- [ ] SMTP configured and `npm run mail:verify -w server` passes
+- [ ] Forgot-password returns the generic message for known and unknown emails
+- [ ] Reset link arrives, is single-use and expires after 30 minutes
 - [ ] Every lesson resource is `READY` with `0` failed (startup pass or admin UI)
 - [ ] Student PDF downloads work; anonymous requests return `401`/`403`
 - [ ] Durable object storage configured if uploads must survive deploys

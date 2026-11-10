@@ -20,7 +20,10 @@
     "db:studio": "prisma studio",
     "migrate": "prisma migrate deploy",
     "resources:generate-all": "tsx scripts/generate-resources.ts",
-    "test:api": "tsx scripts/test-api.ts"
+    "test:api": "tsx scripts/test-api.ts",
+    "admin:set": "node scripts/set-admin.mjs",
+    "mail:verify": "tsx scripts/verify-email.ts",
+    "test:reset": "tsx scripts/test-reset.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

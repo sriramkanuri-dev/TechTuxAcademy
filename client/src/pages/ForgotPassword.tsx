@@ -48,7 +48,8 @@ export default function ForgotPassword() {
             <MailCheck className="mb-3 h-6 w-6 text-emerald-300" />
             <p>{message}</p>
             <p className="mt-3 text-xs text-emerald-200/80">
-              In development, the reset link is printed to the API server console when SMTP is not configured.
+              Check your inbox and spam folder. The link expires in 30 minutes and can only be
+              used once.
             </p>
           </div>
         ) : (

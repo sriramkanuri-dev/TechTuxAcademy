@@ -7,6 +7,7 @@ import { ApiError, asyncHandler } from '../lib/errors';
 import {
   clearSessionCookie,
   hashPassword,
+  hashToken,
   publicUser,
   randomToken,
   requireAuth,
@@ -24,13 +25,37 @@ import {
   resetPasswordSchema,
   validate,
 } from '../lib/validation';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/mailer';
-import { authLimiter } from '../middleware/rateLimit';
+import {
+  sendAdminNewRegistrationEmail,
+  sendPasswordChangedEmail,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+  sendWelcomeEmail,
+} from '../lib/mailer';
+import {
+  authLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+} from '../middleware/rateLimit';
 
 const router = Router();
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
 
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 60 * 60 * 1000);
+const minutesFromNow = (minutes: number) => new Date(Date.now() + minutes * 60 * 1000);
+
+/** Best-effort onboarding mail; failures are logged by the mailer, never thrown. */
+async function sendOnboardingMail(user: { name: string; email: string; createdAt?: Date }) {
+  await sendWelcomeEmail(user.email, user.name);
+  const admins = await prisma.user.findMany({
+    where: { role: 'ADMIN', disabled: false },
+    select: { email: true },
+    take: 10,
+  });
+  await Promise.all(
+    admins.map((admin) => sendAdminNewRegistrationEmail(admin.email, user))
+  );
+}
 
 router.post(
   '/register',
@@ -56,6 +81,9 @@ router.post(
 
     sendVerificationEmail(user.email, user.name, verificationToken).catch((error) =>
       console.error('[mail] verification email failed:', error.message)
+    );
+    sendOnboardingMail(user).catch((error) =>
+      console.error('[mail] onboarding email failed:', error.message)
     );
 
     setSessionCookie(res, signSession(user));
@@ -153,17 +181,23 @@ router.post(
 router.post(
   '/forgot-password',
   authLimiter,
+  forgotPasswordLimiter,
   validate(forgotPasswordSchema),
   asyncHandler(async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email: req.body.email } });
     if (user && !user.disabled) {
       const token = randomToken();
+      // Only a SHA-256 digest is persisted; the raw token exists only in the email.
       await prisma.user.update({
         where: { id: user.id },
-        data: { passwordResetToken: token, passwordResetExpires: hoursFromNow(1) },
+        data: {
+          passwordResetToken: hashToken(token),
+          passwordResetExpires: minutesFromNow(30),
+        },
       });
       await sendPasswordResetEmail(user.email, user.name, token);
     }
+    // Identical response for known, unknown and disabled accounts.
     res.json({
       message: 'If an account exists for that email, a password reset link has been sent.',
     });
@@ -173,20 +207,28 @@ router.post(
 router.post(
   '/reset-password',
   authLimiter,
+  resetPasswordLimiter,
   validate(resetPasswordSchema),
   asyncHandler(async (req, res) => {
-    const user = await prisma.user.findFirst({ where: { passwordResetToken: req.body.token } });
+    const tokenHash = hashToken(req.body.token);
+    const user = await prisma.user.findFirst({ where: { passwordResetToken: tokenHash } });
     if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
       throw new ApiError(400, 'This reset link is invalid or has expired.');
     }
+    const changedAt = new Date();
     await prisma.user.update({
       where: { id: user.id },
       data: {
         passwordHash: await hashPassword(req.body.password),
         passwordResetToken: null,
         passwordResetExpires: null,
+        // Signs out every session issued before this moment.
+        passwordChangedAt: changedAt,
       },
     });
+    // The reset token is single-use and the caller is signed out by the update.
+    clearSessionCookie(res);
+    await sendPasswordChangedEmail(user.email, user.name);
     res.json({ message: 'Password updated. You can now sign in with your new password.' });
   })
 );
@@ -217,10 +259,13 @@ router.put(
       const valid = await verifyPassword(currentPassword, req.user.passwordHash);
       if (!valid) throw new ApiError(400, 'Your current password is incorrect.');
     }
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data: { passwordHash: await hashPassword(newPassword) },
+      data: { passwordHash: await hashPassword(newPassword), passwordChangedAt: new Date() },
     });
+    // Keep the current device signed in while revoking every older session.
+    setSessionCookie(res, signSession(updated));
+    await sendPasswordChangedEmail(updated.email, updated.name);
     res.json({ message: 'Password changed successfully.' });
   })
 );

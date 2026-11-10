@@ -220,14 +220,15 @@ All variables live in `server/.env`. See `.env.example` for the full template.
 | `DIRECT_URL` | for migrations | Direct (non-pooled) PostgreSQL URL used only by Prisma Migrate when `DATABASE_URL` is a pooler. Equal to `DATABASE_URL` for a direct database. |
 | `JWT_SECRET` | **yes in prod** | Long random string used to sign sessions. |
 | `JWT_EXPIRES_IN` | no | Session lifetime (default `7d`). |
-| `CLIENT_URL` | no | Frontend origin (default `http://localhost:5173`). |
+| `CLIENT_URL` | no | Frontend origin (default `http://localhost:5173`). `FRONTEND_URL` is accepted as an alias. |
 | `API_URL` | no | API origin used in logs/links. |
-| `PUBLIC_SITE_URL` | no | Canonical origin for `sitemap.xml`, `robots.txt` and certificate links. Set to `https://techtuxacademy.online` in production. |
+| `PUBLIC_SITE_URL` | no | Canonical origin used in emailed links, `sitemap.xml`, `robots.txt` and certificate links. Set to `https://techtuxacademy.online` in production. |
 | `COOKIE_DOMAIN` | no | Optional cookie domain. Leave **empty** when the SPA reaches the API through the same-origin Pages proxy; a `Domain` cookie is rejected on `*.pages.dev`. |
 | `COOKIE_SAMESITE` | no | `lax` (default), `strict` or `none`. Use `lax` with the same-origin proxy; `none` is only for genuinely cross-site API calls and requires HTTPS. |
 | `CORS_ORIGINS` | no | Comma-separated allowed origins. Leave blank when the SPA and API share an origin. With the Pages proxy, include the canonical site and preview hosts for direct API calls. |
-| `SMTP_HOST/PORT/SECURE/USER/PASS` | no | SMTP credentials. When unset, emails print to the server console. |
-| `MAIL_FROM` | no | Sender address. |
+| `SMTP_HOST/PORT/SECURE/USER/PASS` | no | SMTP credentials for Gmail or any provider. Email is best-effort: a delivery failure never blocks registration, login or password reset. In production, an unconfigured transport logs only a warning (never a reset link). |
+| `MAIL_FROM` | no | Sender address. `EMAIL_FROM` is accepted as an alias. |
+| `ADMIN_EMAIL/ADMIN_NAME/ADMIN_PASSWORD` | no | Inputs to `npm run admin:set -w server`. `ADMIN_PASSWORD` is optional; when omitted a random password is generated but never printed. |
 | `GOOGLE_CLIENT_ID` | no | Enables Google Sign-In. The endpoint returns `503` when unset. |
 | `SEED_ADMIN_EMAIL/PASSWORD` | no | Admin account created by the seed. |
 | `SEED_STUDENT_EMAIL/PASSWORD` | no | Student account created by the seed. |
@@ -256,6 +257,48 @@ Demo certificate ID for verification testing: **`TTA-2026-DEMO0001`** (view at `
 
 ---
 
+## Primary administrator and password reset
+
+Create or promote the primary administrator without introducing a duplicate:
+
+```bash
+# server/.env or the shell environment
+ADMIN_EMAIL=sriramkanuri4@gmail.com ADMIN_NAME="Sriram Kanuri" \
+  npm run admin:set -w server
+```
+
+The script is idempotent. It assigns the existing `ADMIN` role, marks the email
+verified and can optionally set a password from `ADMIN_PASSWORD`. When
+`ADMIN_PASSWORD` is omitted it generates a cryptographically random password and
+**never prints it** — use the "Forgot password?" flow to choose your own.
+
+Password reset flow:
+
+1. `POST /api/auth/forgot-password` always returns the same generic message.
+2. Only a SHA-256 digest of a 32-byte random token is stored in PostgreSQL; the
+   raw token exists only in the emailed link.
+3. Links point at `PUBLIC_SITE_URL/reset-password?token=…` and expire after
+   **30 minutes**.
+4. `POST /api/auth/reset-password` verifies the digest and expiry, hashes the new
+   password with bcrypt (cost 12), deletes the token and stamps
+   `passwordChangedAt`.
+5. `passwordChangedAt` revokes every JWT session issued before the reset. Tokens
+   are single-use.
+6. Forgot-password is limited to 5 requests / 15 min and reset submission to
+   10 / 15 min per client.
+
+Verify SMTP without exposing credentials:
+
+```bash
+npm run mail:verify -w server
+```
+
+Email sending is best-effort. If SMTP is temporarily unavailable, registration,
+login and password reset still succeed; the API logs a warning and the user can
+request a new link later.
+
+---
+
 ## Scripts
 
 Run from the repository root:
@@ -274,6 +317,9 @@ Run from the repository root:
 | `npm run db:studio` | Open Prisma Studio. |
 | `npm run resources:generate-all` | Generate/validate lesson notes + command cheat sheet PDFs for every lesson. |
 | `npm run test:api` | Run the end-to-end API smoke test (server must be running and seeded). |
+| `npm run test:reset -w server` | Run the local password-reset integration test (creates and deletes a throwaway account). |
+| `npm run admin:set -w server` | Create/promote the primary administrator idempotently. |
+| `npm run mail:verify -w server` | Verify the SMTP connection without printing credentials. |
 
 ---
 
@@ -552,7 +598,7 @@ A longer walkthrough lives in [`deploy/RENDER.md`](deploy/RENDER.md).
 - [ ] `COOKIE_DOMAIN` empty and `COOKIE_SAMESITE=lax` when using the same-origin proxy
 - [ ] `CORS_ORIGINS` includes the canonical site and preview hosts
 - [ ] First admin promoted; `ALLOW_PROD_SEED` left `false` (never seed demo data in production)
-- [ ] SMTP configured (otherwise verification/reset links only appear in logs)
+- [ ] SMTP configured and `npm run mail:verify -w server` passes (in development only, links otherwise print to the console)
 - [ ] `PUBLIC_SITE_URL` correct so sitemap and certificate links use the real domain
 - [ ] Startup generation completed: every lesson resource is `READY` with `0` failed
 - [ ] Student PDF downloads work; anonymous requests return `401`/`403`
@@ -639,7 +685,8 @@ Lesson video URLs are YouTube IDs/URLs only; videos are embedded, never download
 | `Missing required environment variable: DATABASE_URL` | Create `server/.env` from `.env.example` and set `DATABASE_URL`. |
 | `JWT_SECRET must be configured in production` | Set a real `JWT_SECRET`; the dev fallback is rejected in production. |
 | `Can't reach database server` | Start PostgreSQL and confirm the host/port in `DATABASE_URL`. For the embedded DB use port `5433`. |
-| Emails not arriving | Configure SMTP; without it, links are printed to the API console. |
+| Emails not arriving | Run `npm run mail:verify -w server` and check the `[mail] delivery failed` log. In production the API never prints reset links; in development an unconfigured transport prints a preview instead. |
+| Gmail returns `535-5.7.8 Username and Password not accepted` | Use a Google **App Password** (requires 2-Step Verification) and set it as `SMTP_PASS`; a normal account password is rejected. |
 | Login works but mutations return `403 CSRF` | Ensure the client sends `x-csrf-token`; it is issued on the first API request. |
 | Google button returns `503` | Set `GOOGLE_CLIENT_ID`. |
 | Certificate download returns `410` | The certificate was revoked by an admin. |

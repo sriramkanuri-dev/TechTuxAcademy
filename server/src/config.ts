@@ -27,9 +27,25 @@ export const config = {
   databaseUrl,
   jwtSecret: required('JWT_SECRET', isProd ? undefined : 'dev-only-insecure-secret-change-me-please-32'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  clientUrl:
+    process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173',
   apiUrl: process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`,
-  publicSiteUrl: process.env.PUBLIC_SITE_URL || process.env.CLIENT_URL || 'http://localhost:5173',
+  publicSiteUrl:
+    process.env.PUBLIC_SITE_URL ||
+    process.env.CLIENT_URL ||
+    process.env.FRONTEND_URL ||
+    'http://localhost:5173',
+  /**
+   * Base URL used inside emails. Defaults to the canonical public site, but can
+   * be overridden (e.g. to the *.pages.dev host) when a DNS redirect currently
+   * drops paths on the canonical domain.
+   */
+  emailLinkBase:
+    process.env.EMAIL_LINK_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    process.env.CLIENT_URL ||
+    process.env.FRONTEND_URL ||
+    'http://localhost:5173',
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
   cookieSameSite: (process.env.COOKIE_SAMESITE || 'lax') as 'lax' | 'strict' | 'none',
   smtp: {
@@ -38,7 +54,11 @@ export const config = {
     secure: process.env.SMTP_SECURE === 'true',
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.MAIL_FROM || 'TechTuxAcademy <no-reply@techtuxacademy.online>',
+    // EMAIL_FROM is accepted as an alias so both operator conventions work.
+    from:
+      process.env.EMAIL_FROM ||
+      process.env.MAIL_FROM ||
+      'TechTuxAcademy <no-reply@techtuxacademy.online>',
   },
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   uploadDir: path.resolve(process.env.UPLOAD_DIR || path.resolve(__dirname, '../uploads')),
