@@ -51,7 +51,12 @@ export async function proxyToApi(request) {
   const target = new URL(incoming.pathname + incoming.search, API_ORIGIN);
 
   const headers = new Headers(request.headers);
+  // Preserve the real client IP for the API's rate limiter. Cloudflare sets
+  // `cf-connecting-ip` and does not let the browser override it; without this,
+  // every proxied request looks like it came from the Worker's egress IP.
+  const clientIp = request.headers.get('cf-connecting-ip');
   for (const name of STRIP_REQUEST_HEADERS) headers.delete(name);
+  if (clientIp) headers.set('x-forwarded-for', clientIp);
   headers.set('origin', SITE_ORIGIN);
   if (!headers.has('referer')) headers.set('referer', `${SITE_ORIGIN}/`);
 
