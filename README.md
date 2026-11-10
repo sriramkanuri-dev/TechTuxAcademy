@@ -416,9 +416,7 @@ for Workers, not Pages).
    functions/
    ├── _lib/proxy.js              # shared forwarding logic
    ├── api/[[path]].js            # /api/*      → https://techtux-api.onrender.com
-   ├── uploads/[[path]].js        # /uploads/*  → https://techtux-api.onrender.com
-   ├── sitemap.xml.js             # /sitemap.xml → API-generated sitemap
-   └── robots.txt.js              # /robots.txt  → API-generated robots.txt
+   └── uploads/[[path]].js        # /uploads/*  → https://techtux-api.onrender.com
    ```
 
    The proxy forwards cookies in both directions and strips Cloudflare-specific
@@ -439,7 +437,7 @@ for Workers, not Pages).
    ```json
    {
      "version": 1,
-     "include": ["/api/*", "/uploads/*", "/sitemap.xml", "/robots.txt"],
+     "include": ["/api/*", "/uploads/*"],
      "exclude": []
    }
    ```
