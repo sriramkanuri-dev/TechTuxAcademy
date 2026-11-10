@@ -83,7 +83,7 @@ export async function proxyToApi(request) {
 
   // Lets us confirm which Pages build is serving traffic without exposing
   // anything sensitive.
-  out.set('x-tta-proxy', 'pages-functions');
+  out.set('x-tta-proxy', 'pages-functions/2');
 
   return new Response(method === 'HEAD' ? null : response.body, {
     status: response.status,
