@@ -99,13 +99,6 @@ export default function Login() {
         </form>
 
         <GoogleButton onSuccess={() => navigate(from || '/dashboard', { replace: true })} />
-
-        <p className="mt-6 rounded-xl border border-line/10 bg-surface/50 px-4 py-3 text-xs leading-5 text-muted">
-          Demo accounts — student: <span className="font-mono text-text/80">student@techtuxacademy.online</span> /{' '}
-          <span className="font-mono text-text/80">Student@12345</span> · admin:{' '}
-          <span className="font-mono text-text/80">admin@techtuxacademy.online</span> /{' '}
-          <span className="font-mono text-text/80">Admin@12345</span>
-        </p>
       </AuthShell>
     </>
   );
