@@ -415,13 +415,16 @@ for Workers, not Pages).
    ```
    functions/
    ├── _lib/proxy.js              # shared forwarding logic
-   ├── api/[[path]].js            # /api/*  → https://techtux-api.onrender.com
-   └── uploads/[[path]].js        # /uploads/* → https://techtux-api.onrender.com
+   ├── api/[[path]].js            # /api/*      → https://techtux-api.onrender.com
+   ├── uploads/[[path]].js        # /uploads/*  → https://techtux-api.onrender.com
+   ├── sitemap.xml.js             # /sitemap.xml → API-generated sitemap
+   └── robots.txt.js              # /robots.txt  → API-generated robots.txt
    ```
 
    The proxy forwards cookies in both directions and strips Cloudflare-specific
    request headers. It sets `Origin` to `https://techtuxacademy.online` so the
-   API's CORS allowlist accepts the server-side request.
+   API's CORS allowlist accepts the server-side request, and forwards the real
+   client IP (`cf-connecting-ip`) for rate limiting.
 
 5. Keep the SPA fallback in `client/public/_redirects` (copied to
    `client/dist/_redirects`):
@@ -436,7 +439,7 @@ for Workers, not Pages).
    ```json
    {
      "version": 1,
-     "include": ["/api/*", "/uploads/*"],
+     "include": ["/api/*", "/uploads/*", "/sitemap.xml", "/robots.txt"],
      "exclude": []
    }
    ```
