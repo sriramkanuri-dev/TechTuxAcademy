@@ -240,9 +240,11 @@ All variables live in `server/.env`. See `.env.example` for the full template.
 
 ---
 
-## Demo credentials
+## Demo credentials (local development only)
 
-Created by `npm run db:seed` (change these before any public deployment):
+`npm run db:seed` creates these accounts for **local development**. Never seed
+production (keep `ALLOW_PROD_SEED=false`) and never reuse these passwords there.
+The public login page does not display credentials.
 
 | Role | Email | Password |
 | --- | --- | --- |
