@@ -8,7 +8,8 @@
 # for this Pages site — `wrangler deploy` targets Workers, not Pages.
 
 name = "techtuxacademy"
-main = "client/dist/index.html"
+# `main` is a Workers-only key and is ignored by Pages. Pages Functions are
+# auto-discovered from the repository-root `functions/` directory.
 compatibility_date = "2026-11-01"
 
 # Build the monorepo's client workspace with the root npm workspace scripts.

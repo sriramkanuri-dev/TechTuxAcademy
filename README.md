@@ -78,7 +78,7 @@ A production-ready full-stack technology learning platform: public course catalo
 | Certificates | PDFKit + QRCode, generated server-side |
 | Lesson resources | PDFKit — per-lesson notes and command cheat sheets, generated in a background queue |
 | Email | Nodemailer (SMTP); falls back to console preview when SMTP is not configured |
-| Uploads | Multer (images) in `UPLOAD_DIR`, generated PDFs in `RESOURCE_STORAGE_DIR`; both survive Render deploys on a persistent disk |
+| Uploads | Multer (images) in `UPLOAD_DIR`, generated PDFs in `RESOURCE_STORAGE_DIR`; on Render's free plan these are ephemeral and missing PDFs are regenerated on boot |
 
 ---
 
@@ -92,7 +92,9 @@ TechTuxAcademy/
 │   │   ├── contexts/       # Auth, Theme, Language, Toast
 │   │   ├── lib/            # API client, types, utilities
 │   │   └── pages/          # public, dashboard and admin pages
+│   ├── public/             # _redirects (SPA fallback) + _routes.json (Functions scope)
 │   └── vite.config.ts
+├── functions/              # Cloudflare Pages Functions: same-origin /api and /uploads proxy
 ├── server/                 # Express + Prisma backend
 │   ├── prisma/             # schema, migrations, seed
 │   ├── scripts/            # embedded-Postgres helper, API smoke test
@@ -221,17 +223,17 @@ All variables live in `server/.env`. See `.env.example` for the full template.
 | `CLIENT_URL` | no | Frontend origin (default `http://localhost:5173`). |
 | `API_URL` | no | API origin used in logs/links. |
 | `PUBLIC_SITE_URL` | no | Canonical origin for `sitemap.xml`, `robots.txt` and certificate links. Set to `https://techtuxacademy.online` in production. |
-| `COOKIE_DOMAIN` | no | Optional cookie domain (e.g. `.techtuxacademy.online`). |
-| `COOKIE_SAMESITE` | no | `lax` (default), `strict` or `none`. `none` requires HTTPS. |
-| `CORS_ORIGINS` | no | Comma-separated allowed origins. Leave blank when the SPA and API share an origin. |
+| `COOKIE_DOMAIN` | no | Optional cookie domain. Leave **empty** when the SPA reaches the API through the same-origin Pages proxy; a `Domain` cookie is rejected on `*.pages.dev`. |
+| `COOKIE_SAMESITE` | no | `lax` (default), `strict` or `none`. Use `lax` with the same-origin proxy; `none` is only for genuinely cross-site API calls and requires HTTPS. |
+| `CORS_ORIGINS` | no | Comma-separated allowed origins. Leave blank when the SPA and API share an origin. With the Pages proxy, include the canonical site and preview hosts for direct API calls. |
 | `SMTP_HOST/PORT/SECURE/USER/PASS` | no | SMTP credentials. When unset, emails print to the server console. |
 | `MAIL_FROM` | no | Sender address. |
 | `GOOGLE_CLIENT_ID` | no | Enables Google Sign-In. The endpoint returns `503` when unset. |
 | `SEED_ADMIN_EMAIL/PASSWORD` | no | Admin account created by the seed. |
 | `SEED_STUDENT_EMAIL/PASSWORD` | no | Student account created by the seed. |
 | `ALLOW_PROD_SEED` | no | Seeding is blocked in production unless set to `true`. |
-| `UPLOAD_DIR` | no | Directory for uploaded images (default `server/uploads`). On Render use `/var/data/uploads`. |
-| `RESOURCE_STORAGE_DIR` | no | Directory for generated lesson PDFs (default `storage/`, gitignored). On Render use `/var/data/resources`. |
+| `UPLOAD_DIR` | no | Directory for uploaded images (default `server/uploads`). On Render's free plan this is ephemeral. |
+| `RESOURCE_STORAGE_DIR` | no | Directory for generated lesson PDFs (default `storage/`, gitignored). On Render's free plan this is ephemeral; missing files are re-queued on boot. |
 | `AUTO_GENERATE_RESOURCES` | no | Generate PDFs automatically for new/updated lessons (default `true`). |
 | `RESOURCE_GENERATION_CONCURRENCY` | no | Background PDF workers, 1–4 (default `2`). |
 | `EMBEDDED_PG_PORT/USER/PASSWORD/DATABASE` | no | Only used by `npm run db:start`. |
@@ -377,26 +379,25 @@ Caddy provisions HTTPS automatically. Point the domain's DNS `A`/`AAAA` records 
 
 ### Cloudflare Pages (static SPA hosting)
 
-Cloudflare Pages hosts the **static React + Vite frontend**; the Express API is a
-separate project and stays untouched. Because this is an npm-workspaces
-monorepo, the Pages build runs only the `client` workspace and uploads
-`client/dist`. This is a **Git-integration deployment** — Cloudflare builds on
-every push to `main`, and you do **not** run `wrangler deploy` (that command is
+Cloudflare Pages hosts the **static React + Vite frontend**. The Express API is a
+separate Render service, and the browser reaches it through a **same-origin
+Pages Functions proxy** at `/api` and `/uploads`. This keeps auth cookies
+first-party, avoids third-party-cookie blocking, and means the SPA never needs a
+build-time API host. This is a **Git-integration deployment** — Cloudflare builds
+on every push to `main`; you do **not** run `wrangler deploy` (that command is
 for Workers, not Pages).
 
 1. Create a Cloudflare Pages project and connect the `TechTuxAcademy` GitHub
-   repository (the same repo used for Hostinger).
+   repository.
 2. In the dashboard, under **Build & deploy**:
    - **Framework preset:** `Vite` (or `None`)
    - **Build command:** `npm ci && npm run build -w client`
    - **Build output directory:** `client/dist`
 
-3. Add a `wrangler.toml` at the repository root:
+3. `wrangler.toml` at the repository root defines the Pages build:
 
    ```toml
-   # Cloudflare Pages configuration for the TechTuxAcademy frontend.
    name = "techtuxacademy"
-   main = "client/dist/index.html"
    compatibility_date = "2026-11-01"
 
    [build]
@@ -405,41 +406,73 @@ for Workers, not Pages).
    pages_build_output_dir = "client/dist"
    ```
 
-   `main` points at the built SPA entrypoint; `pages_build_output_dir` is the
-   `client/dist` Vite output.
+   `main` is a Workers-only key and must **not** be set for a Pages project.
+   Pages Functions are auto-discovered from the repository-root `functions/`
+   directory.
 
-4. Add an SPA fallback rule. Create `client/public/_redirects` (Vite copies it to
+4. The repository contains the same-origin proxy:
+
+   ```
+   functions/
+   ├── _lib/proxy.js              # shared forwarding logic
+   ├── api/[[path]].js            # /api/*  → https://techtux-api.onrender.com
+   └── uploads/[[path]].js        # /uploads/* → https://techtux-api.onrender.com
+   ```
+
+   The proxy forwards cookies in both directions and strips Cloudflare-specific
+   request headers. It sets `Origin` to `https://techtuxacademy.online` so the
+   API's CORS allowlist accepts the server-side request.
+
+5. Keep the SPA fallback in `client/public/_redirects` (copied to
    `client/dist/_redirects`):
 
    ```
    /* /index.html 200
    ```
 
-5. Set the API URL at build time. The frontend sends session cookies (no tokens
-   in the bundle), so `VITE_API_URL` is **not** a secret. In the Cloudflare Pages
-   dashboard, go to **Settings → Environment variables** and add:
+   Scope Functions with `client/public/_routes.json` so only API paths invoke
+   them and static assets stay on the free unlimited tier:
 
-   | Variable | Value |
-   | --- | --- |
-   | `VITE_API_URL` | `https://api.techtuxacademy.online` |
+   ```json
+   {
+     "version": 1,
+     "include": ["/api/*", "/uploads/*"],
+     "exclude": []
+   }
+   ```
 
-   See `client/.env.example` for the template.
+6. **No `VITE_API_URL` is required.** `client/src/lib/api.ts` defaults to the
+   relative base `/api`, which works on `techtuxacademy.online`, `www`, and the
+   `*.pages.dev` preview. If you later move the API to a different host, set
+   `VITE_API_URL` in **Settings → Environment variables**; the client appends
+   `/api` automatically. See `client/.env.example` for the template.
+
+> **Custom domain:** `techtuxacademy.online` must be served by Cloudflare Pages
+> (or proxy to it). If the domain currently 301-redirects to
+> `techtuxacademy.pages.dev`, fix the redirect at the DNS/hosting provider
+> (Hostinger in this deployment) or attach the domain in the Cloudflare Pages
+> dashboard. The proxy itself works on the `*.pages.dev` host without any DNS
+> change.
 
 ### Render (Express backend) + Supabase PostgreSQL
 
 Render hosts the **Express + Prisma backend** (`server/`). The database is
 **Supabase PostgreSQL** (not a Render-managed database), and the React frontend
-stays on Cloudflare Pages. A Render persistent disk keeps uploaded images and
-generated lesson PDFs across deploys.
+stays on Cloudflare Pages, reaching the API through the same-origin Pages
+Functions proxy.
 
 **1. Create the Supabase database**
 
-1. Create a project at <https://supabase.com>.
+1. Create a project at <https://supabase.com> (choose the region closest to
+   Render — this deployment uses `us-west-2` with Render `oregon`).
 2. Open **Project Settings → Database → Connection string**.
 3. Copy the **Transaction pooler** URI (port `6543`) and append
-   `?pgbouncer=true&connection_limit=1` if missing → this is `DATABASE_URL`.
-4. Copy the **Direct connection** URI (port `5432`) → this is `DIRECT_URL`.
-   Prisma Migrate uses it to bypass the pooler.
+   `?pgbouncer=true&connection_limit=1&sslmode=require` if missing → this is
+   `DATABASE_URL`.
+4. Copy the **Session pooler** URI (port `5432`) → this is `DIRECT_URL`. Prisma
+   Migrate uses it to bypass the transaction pooler. Prefer the pooler host for
+   both values: Supabase's direct `db.<ref>.supabase.co` host is often IPv6-only,
+   which Render cannot reach.
 
 The server refuses to start in production if `DATABASE_URL` still contains the
 placeholder text `{project-ref}` or `***`.
@@ -452,7 +485,7 @@ placeholder text `{project-ref}` or `***`.
    `render.yaml`.
 3. Render asks for the two values marked `sync: false`:
    - `DATABASE_URL` — the Supabase pooled URI
-   - `DIRECT_URL` — the Supabase direct URI
+   - `DIRECT_URL` — the Supabase session-pooler URI
 
    They are stored as Render secrets and never committed.
 4. Review the generated settings:
@@ -460,31 +493,39 @@ placeholder text `{project-ref}` or `***`.
    - **Start command:** `npm run db:deploy && npm start`
      (runs `prisma migrate deploy`, then `node server/dist/index.js`)
    - **Health check:** `/api/health`
-   - **Disk:** `techtux-data` mounted at `/var/data` (Starter plan or higher)
-   - `UPLOAD_DIR=/var/data/uploads`, `RESOURCE_STORAGE_DIR=/var/data/resources`
+   - **Plan:** `free` — no persistent disk
    - `AUTO_GENERATE_RESOURCES=true`, `RESOURCE_GENERATION_CONCURRENCY=2`
-   - `JWT_SECRET` generated by Render; `COOKIE_SAMESITE=none`,
-     `COOKIE_DOMAIN=.techtuxacademy.online`, `CORS_ORIGINS` set to the site origin
+   - `JWT_SECRET` generated by Render
+   - `COOKIE_DOMAIN=` (empty) and `COOKIE_SAMESITE=lax`
+   - `CORS_ORIGINS=https://techtuxacademy.online,https://www.techtuxacademy.online,https://techtuxacademy.pages.dev`
 5. **Create Web Service.** Render runs migrations on every deploy, so the
    Supabase schema is created automatically.
 
-> On the free plan, remove the `disk:` block. Uploads and generated PDFs are then
-> lost on every redeploy, and you must regenerate resources after each deploy.
+> **Free plan:** there is no disk. Uploaded images and generated PDFs live on the
+> ephemeral filesystem. `server/src/index.ts` queues a background generation pass
+> on every boot; files that are already present and up to date are skipped by the
+> content-hash check, so missing PDFs are recreated automatically after a
+> redeploy or cold start. Use object storage (S3/R2/Supabase Storage) for durable
+> user uploads.
 
 **3. Post-deploy**
 
 ```bash
-# Generate the PDFs for every lesson (run from a Render Shell)
-npm run resources:generate-all
-
-# Verify the API
+# Verify the API directly
 curl https://<service>.onrender.com/api/health
+
+# Verify through the Pages proxy (after Cloudflare rebuilds)
+curl https://techtuxacademy.pages.dev/api/health
 ```
 
-Then point the custom domain `api.techtuxacademy.online` at the Render service
-(**Settings → Custom Domains**) and set `VITE_API_URL` on Cloudflare Pages to
-`https://api.techtuxacademy.online` (the client normalizes a missing `/api`
-suffix automatically).
+The API custom domain `api.techtuxacademy.online` is **optional** with the proxy.
+If you want it, add it in **Settings → Custom Domains** and create a `CNAME`
+record `api` → `techtux-api.onrender.com` at your DNS provider. Do not set
+`VITE_API_URL`; the client uses the relative `/api` base.
+
+Admins can generate/regenerate PDFs from **Admin → Learning resources**. The
+startup pass and the admin queue both run in the background so the API stays
+responsive.
 
 A longer walkthrough lives in [`deploy/RENDER.md`](deploy/RENDER.md).
 
@@ -492,13 +533,17 @@ A longer walkthrough lives in [`deploy/RENDER.md`](deploy/RENDER.md).
 
 - [ ] `NODE_ENV=production` and a strong `JWT_SECRET`
 - [ ] HTTPS active; cookies marked `secure` automatically
-- [ ] `npm run db:deploy` applied with the direct database URL
+- [ ] `npm run db:deploy` applied with the session-pooler URL
+- [ ] `GET /api/health` returns `{"status":"ok"}` directly and through the Pages proxy
+- [ ] `COOKIE_DOMAIN` empty and `COOKIE_SAMESITE=lax` when using the same-origin proxy
+- [ ] `CORS_ORIGINS` includes the canonical site and preview hosts
 - [ ] First admin promoted; `ALLOW_PROD_SEED` left `false` (never seed demo data in production)
 - [ ] SMTP configured (otherwise verification/reset links only appear in logs)
 - [ ] `PUBLIC_SITE_URL` correct so sitemap and certificate links use the real domain
-- [ ] `UPLOAD_DIR` / `RESOURCE_STORAGE_DIR` on the persistent disk (or resources regenerated after deploy)
-- [ ] `npm run resources:generate-all` run so every lesson has both PDFs
-- [ ] Database and uploaded/generated files backed up
+- [ ] Startup generation completed: every lesson resource is `READY` with `0` failed
+- [ ] Student PDF downloads work; anonymous requests return `401`/`403`
+- [ ] Uploaded images moved to durable object storage if they must survive deploys
+- [ ] Supabase backups configured
 
 ---
 
@@ -585,6 +630,10 @@ Lesson video URLs are YouTube IDs/URLs only; videos are embedded, never download
 | Google button returns `503` | Set `GOOGLE_CLIENT_ID`. |
 | Certificate download returns `410` | The certificate was revoked by an admin. |
 | SPA routes 404 behind a proxy | Configure the proxy to fall back to `index.html` for non-API paths. |
+| `/api/health` returns the SPA HTML | The Pages Functions proxy is missing or `_routes.json` excludes `/api/*`. Ensure `functions/api/[[path]].js` is committed and the Pages build ran. |
+| Login succeeds but the session is not kept | With the same-origin proxy, set `COOKIE_DOMAIN` empty and `COOKIE_SAMESITE=lax`. A `Domain=.techtuxacademy.online` cookie is rejected on `*.pages.dev`. |
+| API works directly but not from the site | Check the Pages Function proxy origin (`functions/_lib/proxy.js`) and that `CORS_ORIGINS` includes the site/preview hosts. |
+| Site 301-redirects to `*.pages.dev` | Fix the DNS/hosting redirect (Hostinger) or attach the custom domain to the Cloudflare Pages project. |
 
 ---
 

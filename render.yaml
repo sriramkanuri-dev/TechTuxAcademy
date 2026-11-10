@@ -2,33 +2,37 @@
 #
 # Deploys the TechTuxAcademy **Express backend (`server/`)** as a Render Web
 # Service. The database is **Supabase PostgreSQL**, not a Render-managed
-# database. The React+Vite frontend in `client/` stays on Cloudflare Pages.
+# database. The React+Vite frontend in `client/` stays on Cloudflare Pages and
+# reaches the API through the same-origin Pages Functions proxy in `functions/`.
 #
 # Deploy (Render dashboard → New + → Blueprint):
 #   1. Link the GitHub repo `sriramkanuri-dev/TechTuxAcademy`.
 #   2. Render detects this file and asks for the two secret values marked
 #      `sync: false`:
 #        DATABASE_URL — Supabase **pooled** URI   (port 6543, ?pgbouncer=true)
-#        DIRECT_URL   — Supabase **direct** URI   (port 5432)
+#        DIRECT_URL   — Supabase **session pooler** URI (port 5432, IPv4)
 #      Copy both from Supabase → Project Settings → Database → Connection string.
+#      Prefer the pooler hosts (`aws-<n>-<region>.pooler.supabase.com`) for both:
+#      Supabase's direct `db.<ref>.supabase.co` host is often IPv6-only, which
+#      Render cannot reach.
 #   3. Create the service. Render runs migrations, then starts the API.
 #
 # Supabase connection string format:
-#   Pooled: postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
-#   Direct: postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
-#   (Older projects use db.<project-ref>.supabase.co instead of the pooler host.)
+#   Pooled:  postgresql://postgres.<project-ref>:<password>@aws-<n>-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
+#   Session: postgresql://postgres.<project-ref>:<password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?sslmode=require
 #
-# Persistent files: Render's filesystem is ephemeral. A 1 GB disk is mounted at
-# /var/data so uploaded images and generated lesson PDFs survive deploys.
-# Render disks require the Starter plan (or higher); on the free plan remove the
-# `disk:` block and expect uploads/resources to be lost on redeploy.
+# Storage: this blueprint uses Render's **free plan**, which has no persistent
+# disk. Generated lesson PDFs are ephemeral; `server/src/index.ts` re-queues
+# missing files in the background on every boot, and up-to-date files are
+# skipped via the content-hash check. Uploaded images are also ephemeral — move
+# them to object storage before relying on them in production.
 
 services:
   - type: web
     name: techtux-api
     runtime: node
     region: oregon
-    plan: starter
+    plan: free
     autoDeploy: true
     healthCheckPath: /api/health
     buildCommand: npm ci && npm run build -w server
@@ -43,7 +47,7 @@ services:
       # Pooled connection used by the running app.
       - key: DATABASE_URL
         sync: false
-      # Direct connection used only by `prisma migrate deploy`.
+      # Session-pooler connection used only by `prisma migrate deploy`.
       - key: DIRECT_URL
         sync: false
 
@@ -54,6 +58,10 @@ services:
         value: 7d
 
       # ── Public URLs & cookies ────────────────────────────────────────
+      # The browser talks to the Pages host, which proxies /api to this
+      # service. Cookies must therefore be host-only and SameSite=Lax;
+      # a Domain=.techtuxacademy.online cookie would be rejected on
+      # *.pages.dev and SameSite=None invites third-party-cookie blocking.
       - key: PUBLIC_SITE_URL
         value: https://techtuxacademy.online
       - key: CLIENT_URL
@@ -61,17 +69,13 @@ services:
       - key: API_URL
         value: https://api.techtuxacademy.online
       - key: COOKIE_DOMAIN
-        value: .techtuxacademy.online
+        value: ""
       - key: COOKIE_SAMESITE
-        value: none
+        value: lax
       - key: CORS_ORIGINS
-        value: https://techtuxacademy.online
+        value: https://techtuxacademy.online,https://www.techtuxacademy.online,https://techtuxacademy.pages.dev
 
-      # ── Persistent storage on the mounted disk ───────────────────────
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
-      - key: RESOURCE_STORAGE_DIR
-        value: /var/data/resources
+      # ── Generated resources (ephemeral on the free plan) ─────────────
       - key: AUTO_GENERATE_RESOURCES
         value: "true"
       - key: RESOURCE_GENERATION_CONCURRENCY
@@ -98,8 +102,3 @@ services:
       # Never seed demo content into the production Supabase database.
       - key: ALLOW_PROD_SEED
         value: "false"
-
-    disk:
-      name: techtux-data
-      mountPath: /var/data
-      sizeGB: 1
