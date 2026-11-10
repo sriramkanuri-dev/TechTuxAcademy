@@ -81,6 +81,10 @@ export async function proxyToApi(request) {
       : [];
   for (const cookie of cookies) out.append('set-cookie', cookie);
 
+  // Lets us confirm which Pages build is serving traffic without exposing
+  // anything sensitive.
+  out.set('x-tta-proxy', 'pages-functions');
+
   return new Response(method === 'HEAD' ? null : response.body, {
     status: response.status,
     statusText: response.statusText,
