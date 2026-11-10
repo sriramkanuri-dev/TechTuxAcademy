@@ -19,6 +19,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "migrate": "prisma migrate deploy",
+    "resources:generate-all": "tsx scripts/generate-resources.ts",
     "test:api": "tsx scripts/test-api.ts"
   },
   "prisma": {

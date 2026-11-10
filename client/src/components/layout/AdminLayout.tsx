@@ -4,6 +4,7 @@ import {
   Award,
   BarChart3,
   BookOpen,
+  FileText,
   FolderTree,
   Globe2,
   GraduationCap,
@@ -30,6 +31,7 @@ const nav = [
   { to: '/admin/enrollments', label: 'Enrollments', icon: GraduationCap },
   { to: '/admin/certificates', label: 'Certificates', icon: Award },
   { to: '/admin/categories', label: 'Categories', icon: FolderTree },
+  { to: '/admin/resources', label: 'Learning resources', icon: FileText },
   { to: '/admin/website', label: 'Website', icon: Globe2 },
   { to: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
 ];

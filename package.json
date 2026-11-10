@@ -17,6 +17,7 @@
     "db:migrate": "npm run db:migrate -w server",
     "db:deploy": "npm run db:deploy -w server",
     "db:seed": "npm run db:seed -w server",
+    "resources:generate-all": "npm run resources:generate-all -w server",
     "test:api": "npm run test:api -w server",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
   },

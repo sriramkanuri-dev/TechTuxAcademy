@@ -1,5 +1,8 @@
 # Deploying TechTuxAcademy to Hostinger (managed Node.js)
 
+> Deploying the backend to **Render with Supabase** instead? See
+> [`RENDER.md`](RENDER.md).
+
 This guide targets **Hostinger Node.js Web App** hosting for `https://techtuxacademy.online`.
 It does **not** use Docker Compose. Hostinger runs one Node.js process and injects
 `process.env.PORT` at runtime; the app already reads that variable.

@@ -1,20 +1,27 @@
-# render.yaml — Render Blueprint
+# render.yaml — Render Blueprint (Express backend + Supabase PostgreSQL)
 #
 # Deploys the TechTuxAcademy **Express backend (`server/`)** as a Render Web
-# Service, paired with a managed PostgreSQL database. The React+Vite frontend
-# in `client/` stays on Cloudflare Pages (see README "Cloudflare Pages"
-# section) and is NOT part of this deployment.
+# Service. The database is **Supabase PostgreSQL**, not a Render-managed
+# database. The React+Vite frontend in `client/` stays on Cloudflare Pages.
 #
-# Deploy (from Render dashboard → New → Blueprint):
-#   1. Sign up at https://render.com, link your GitHub repo
-#      `sriramkanuri-dev/TechTuxAcademy`.
-#   2. Render detects `render.yaml` (Blueprint) and offers "Import Blueprint".
-#   3. Choose a region, review, Create. Render provisions the Web Service and
-#      the managed PostgreSQL DB on a private network, then syncs the
-#      connection strings into the Web Service env vars at deploy time.
+# Deploy (Render dashboard → New + → Blueprint):
+#   1. Link the GitHub repo `sriramkanuri-dev/TechTuxAcademy`.
+#   2. Render detects this file and asks for the two secret values marked
+#      `sync: false`:
+#        DATABASE_URL — Supabase **pooled** URI   (port 6543, ?pgbouncer=true)
+#        DIRECT_URL   — Supabase **direct** URI   (port 5432)
+#      Copy both from Supabase → Project Settings → Database → Connection string.
+#   3. Create the service. Render runs migrations, then starts the API.
 #
-# Build:   npm ci && npm run build      → install deps + tsc → server/dist + prisma client
-# Start:   npm run migrate && npm start → deploy schema, then node server/dist/index.js
+# Supabase connection string format:
+#   Pooled: postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
+#   Direct: postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+#   (Older projects use db.<project-ref>.supabase.co instead of the pooler host.)
+#
+# Persistent files: Render's filesystem is ephemeral. A 1 GB disk is mounted at
+# /var/data so uploaded images and generated lesson PDFs survive deploys.
+# Render disks require the Starter plan (or higher); on the free plan remove the
+# `disk:` block and expect uploads/resources to be lost on redeploy.
 
 services:
   - type: web
@@ -22,34 +29,55 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    buildCommand: npm ci && npm run build
-    startCommand: npm run migrate && npm start
+    autoDeploy: true
+    healthCheckPath: /api/health
+    buildCommand: npm ci && npm run build -w server
+    startCommand: npm run db:deploy && npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "10000"
-      # Database (wired from the managed Postgres resource below)
+
+      # ── Supabase database (enter these in the Render dashboard) ──────
+      # Pooled connection used by the running app.
       - key: DATABASE_URL
-        fromDatabase:
-          name: techtuxdb
-          property: connectionString
+        sync: false
+      # Direct connection used only by `prisma migrate deploy`.
       - key: DIRECT_URL
-        fromDatabase:
-          name: techtuxdb
-          property: connectionString
+        sync: false
+
+      # ── Auth ─────────────────────────────────────────────────────────
       - key: JWT_SECRET
         generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+
+      # ── Public URLs & cookies ────────────────────────────────────────
+      - key: PUBLIC_SITE_URL
+        value: https://techtuxacademy.online
+      - key: CLIENT_URL
+        value: https://techtuxacademy.online
+      - key: API_URL
+        value: https://api.techtuxacademy.online
       - key: COOKIE_DOMAIN
         value: .techtuxacademy.online
       - key: COOKIE_SAMESITE
         value: none
       - key: CORS_ORIGINS
         value: https://techtuxacademy.online
-      - key: CLIENT_URL
-        value: https://techtuxacademy.online
-      - key: API_URL
-        value: https://api.techtuxacademy.online
+
+      # ── Persistent storage on the mounted disk ───────────────────────
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: RESOURCE_STORAGE_DIR
+        value: /var/data/resources
+      - key: AUTO_GENERATE_RESOURCES
+        value: "true"
+      - key: RESOURCE_GENERATION_CONCURRENCY
+        value: "2"
+
+      # ── Email (optional; leave blank to log messages) ────────────────
       - key: SMTP_HOST
         value: ""
       - key: SMTP_PORT
@@ -62,12 +90,16 @@ services:
         value: ""
       - key: MAIL_FROM
         value: TechTuxAcademy <no-reply@techtuxacademy.online>
+
+      # ── Optional Google Sign-In ──────────────────────────────────────
       - key: GOOGLE_CLIENT_ID
         value: ""
+
+      # Never seed demo content into the production Supabase database.
       - key: ALLOW_PROD_SEED
         value: "false"
 
-databases:
-  - name: techtuxdb
-    plan: starter
-    region: oregon
+    disk:
+      name: techtux-data
+      mountPath: /var/data
+      sizeGB: 1

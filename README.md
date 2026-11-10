@@ -50,12 +50,14 @@ A production-ready full-stack technology learning platform: public course catalo
 - Register, login, logout, email verification, forgot/reset password, profile and password change.
 - Dashboard with real enrolment, progress and certificate data.
 - Learning player with YouTube embeds, lesson sidebar, watched/completed tracking, resume and course-completion detection.
+- Downloadable per-lesson PDFs (lesson notes and command cheat sheets) generated automatically from lesson content.
 - Certificates issued automatically at the course threshold; PDF download with QR code and unique ID.
 
 **Admins**
 - Live overview stats, analytics, recent activity.
 - Course and lesson CRUD (including YouTube URLs, resources, preview flags, publish state).
 - Tutorial and blog post CRUD (markdown, Telugu fields, tags, categories, publish state).
+- Learning-resources console: generate/regenerate/delete lesson PDFs, mark content outdated, inspect failures and monitor background generation jobs.
 - User management: roles, enable/disable, email verification visibility.
 - Enrolment reporting.
 - Certificate management: revoke/reinstate with reason; revoked certificates fail public verification.
@@ -74,8 +76,9 @@ A production-ready full-stack technology learning platform: public course catalo
 | Database | PostgreSQL 16 |
 | Auth | JWT session in an `httpOnly` cookie, bcrypt password hashing, double-submit CSRF token, RBAC |
 | Certificates | PDFKit + QRCode, generated server-side |
+| Lesson resources | PDFKit — per-lesson notes and command cheat sheets, generated in a background queue |
 | Email | Nodemailer (SMTP); falls back to console preview when SMTP is not configured |
-| Uploads | Multer (images) stored in `server/uploads`, served at `/uploads` |
+| Uploads | Multer (images) in `UPLOAD_DIR`, generated PDFs in `RESOURCE_STORAGE_DIR`; both survive Render deploys on a persistent disk |
 
 ---
 
@@ -227,6 +230,10 @@ All variables live in `server/.env`. See `.env.example` for the full template.
 | `SEED_ADMIN_EMAIL/PASSWORD` | no | Admin account created by the seed. |
 | `SEED_STUDENT_EMAIL/PASSWORD` | no | Student account created by the seed. |
 | `ALLOW_PROD_SEED` | no | Seeding is blocked in production unless set to `true`. |
+| `UPLOAD_DIR` | no | Directory for uploaded images (default `server/uploads`). On Render use `/var/data/uploads`. |
+| `RESOURCE_STORAGE_DIR` | no | Directory for generated lesson PDFs (default `storage/`, gitignored). On Render use `/var/data/resources`. |
+| `AUTO_GENERATE_RESOURCES` | no | Generate PDFs automatically for new/updated lessons (default `true`). |
+| `RESOURCE_GENERATION_CONCURRENCY` | no | Background PDF workers, 1–4 (default `2`). |
 | `EMBEDDED_PG_PORT/USER/PASSWORD/DATABASE` | no | Only used by `npm run db:start`. |
 
 ---
@@ -261,6 +268,7 @@ Run from the repository root:
 | `npm run db:deploy` | Apply migrations in production. |
 | `npm run db:seed` | Seed demo content. |
 | `npm run db:studio` | Open Prisma Studio. |
+| `npm run resources:generate-all` | Generate/validate lesson notes + command cheat sheet PDFs for every lesson. |
 | `npm run test:api` | Run the end-to-end API smoke test (server must be running and seeded). |
 
 ---
@@ -417,39 +425,68 @@ for Workers, not Pages).
 
    See `client/.env.example` for the template.
 
-### Render (Express backend)
+### Render (Express backend) + Supabase PostgreSQL
 
-Render hosts the **Express + Prisma + PostgreSQL backend** (`server/`). The
-React frontend remains on Cloudflare Pages. Render provisions a managed
-PostgreSQL database and wires the connection string automatically via the
-`render.yaml` Blueprint.
+Render hosts the **Express + Prisma backend** (`server/`). The database is
+**Supabase PostgreSQL** (not a Render-managed database), and the React frontend
+stays on Cloudflare Pages. A Render persistent disk keeps uploaded images and
+generated lesson PDFs across deploys.
 
-1. Sign up at https://render.com and link your GitHub repository
-   `sriramkanuri-dev/TechTuxAcademy` (the same repo used for Cloudflare Pages).
-2. In the Render dashboard, go to **New +** → **Blueprint** and confirm Render
-   imported `render.yaml`. Render creates:
-   - a Web Service (`techtux-api`) with `runtime: node`, and
-   - a managed PostgreSQL database (`techtuxdb`).
-3. Review the build/deploy settings:
-   - **Build command:** `npm ci && npm run build` (install deps → `prisma generate`
-     → `tsc -p tsconfig.json` → `server/dist`)
-   - **Start command:** `npm run migrate && npm start` where `migrate` is
-     `prisma migrate deploy`, then `node server/dist/index.js`
-4. Under **Environment**, verify the key variables:
-   - `NODE_ENV=production`, `PORT=10000` (Render default listening port)
-   - `JWT_SECRET` — rendered random on creation (`generateValue: true`), never
-     committed.
-   - `DATABASE_URL` / `DIRECT_URL` — wired from `techtuxdb` via `fromDatabase`.
-     If you enable PgBouncer, point `DATABASE_URL` at the pooled connection and
-     keep `DIRECT_URL` as the internal URL.
-   - `COOKIE_DOMAIN=.techtuxacademy.online` and `COOKIE_SAMESITE=none`
-     (so the `httpOnly` session cookie is sent across subdomains),
-   - `CORS_ORIGINS=https://techtuxacademy.online`, `CLIENT_URL`,
-     `API_URL=https://api.techtuxacademy.online`
-   - SMTP vars left empty unless you configure mail.
-5. **Deploy.** Watch the build logs for `npm ci`, `prisma generate`, `tsc -p
-   tsconfig.json`, `prisma migrate deploy`, and `node server/dist/index.js`.
-6. Verify the API is live: `GET /api/health` returns `{"status":"ok",...}`.
+**1. Create the Supabase database**
+
+1. Create a project at <https://supabase.com>.
+2. Open **Project Settings → Database → Connection string**.
+3. Copy the **Transaction pooler** URI (port `6543`) and append
+   `?pgbouncer=true&connection_limit=1` if missing → this is `DATABASE_URL`.
+4. Copy the **Direct connection** URI (port `5432`) → this is `DIRECT_URL`.
+   Prisma Migrate uses it to bypass the pooler.
+
+The server refuses to start in production if `DATABASE_URL` still contains the
+placeholder text `{project-ref}` or `***`.
+
+**2. Deploy the Blueprint**
+
+1. Sign up at <https://render.com> and link the GitHub repository
+   `sriramkanuri-dev/TechTuxAcademy`.
+2. **New + → Blueprint**, select the repo, and confirm Render detects
+   `render.yaml`.
+3. Render asks for the two values marked `sync: false`:
+   - `DATABASE_URL` — the Supabase pooled URI
+   - `DIRECT_URL` — the Supabase direct URI
+
+   They are stored as Render secrets and never committed.
+4. Review the generated settings:
+   - **Build command:** `npm ci && npm run build -w server`
+   - **Start command:** `npm run db:deploy && npm start`
+     (runs `prisma migrate deploy`, then `node server/dist/index.js`)
+   - **Health check:** `/api/health`
+   - **Disk:** `techtux-data` mounted at `/var/data` (Starter plan or higher)
+   - `UPLOAD_DIR=/var/data/uploads`, `RESOURCE_STORAGE_DIR=/var/data/resources`
+   - `AUTO_GENERATE_RESOURCES=true`, `RESOURCE_GENERATION_CONCURRENCY=2`
+   - `JWT_SECRET` generated by Render; `COOKIE_SAMESITE=none`,
+     `COOKIE_DOMAIN=.techtuxacademy.online`, `CORS_ORIGINS` set to the site origin
+5. **Create Web Service.** Render runs migrations on every deploy, so the
+   Supabase schema is created automatically.
+
+> On the free plan, remove the `disk:` block. Uploads and generated PDFs are then
+> lost on every redeploy, and you must regenerate resources after each deploy.
+
+**3. Post-deploy**
+
+```bash
+# Generate the PDFs for every lesson (run from a Render Shell)
+npm run resources:generate-all
+
+# Verify the API
+curl https://<service>.onrender.com/api/health
+```
+
+Then point the custom domain `api.techtuxacademy.online` at the Render service
+(**Settings → Custom Domains**) and set `VITE_API_URL` on Cloudflare Pages to
+`https://api.techtuxacademy.online` (the client normalizes a missing `/api`
+suffix automatically).
+
+A longer walkthrough lives in [`deploy/RENDER.md`](deploy/RENDER.md).
 
 ### Post-deploy checklist
 
@@ -459,7 +496,9 @@ PostgreSQL database and wires the connection string automatically via the
 - [ ] First admin promoted; `ALLOW_PROD_SEED` left `false` (never seed demo data in production)
 - [ ] SMTP configured (otherwise verification/reset links only appear in logs)
 - [ ] `PUBLIC_SITE_URL` correct so sitemap and certificate links use the real domain
-- [ ] Database and `server/uploads` backed up
+- [ ] `UPLOAD_DIR` / `RESOURCE_STORAGE_DIR` on the persistent disk (or resources regenerated after deploy)
+- [ ] `npm run resources:generate-all` run so every lesson has both PDFs
+- [ ] Database and uploaded/generated files backed up
 
 ---
 
@@ -475,6 +514,8 @@ All endpoints are under `/api`. Mutations require the `x-csrf-token` header matc
 | Site | `GET /api/site/home`, `/site/settings`, `/testimonials`, `/announcements` |
 | Learning | `POST /api/me/enroll/:courseId`, `GET /api/me/enrollments`, `/me/courses/:slug`, `/me/dashboard`, `POST /api/me/lessons/:id/watch`, `/complete`, `GET /api/me/certificates` |
 | Certificates | `GET /api/certificates/verify/:id`, `GET /api/certificates/:id/pdf` |
+| Lesson resources | `GET /api/resources/lesson/:lessonId`, `GET /api/resources/:id/file` (enrolled students and admins only) |
+| Admin resources | `GET /api/admin/resources/overview`, `/missing`, `/jobs`, `/jobs/:id`, `/courses/:id`; `POST .../generate`, `.../generate-all`, `.../outdated`, `.../cleanup`; `DELETE /api/admin/resources/:id` |
 | Admin | `GET /api/admin/stats`, `/users`, `/enrollments`, `/certificates`, `/settings`, `/newsletter`, `/messages`; content CRUD under `/courses/admin`, `/tutorials/admin`, `/posts/admin`, `/categories/admin` |
 | SEO | `GET /sitemap.xml`, `/robots.txt` |
 

@@ -63,7 +63,7 @@ function cookieOptions() {
   return {
     httpOnly: true,
     secure: config.isProd,
-    sameSite: (process.env.COOKIE_SAMESITE || 'lax') as 'lax' | 'strict' | 'none',
+    sameSite: config.cookieSameSite,
     domain: config.cookieDomain,
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,

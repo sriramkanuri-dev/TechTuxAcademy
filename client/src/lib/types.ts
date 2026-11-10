@@ -44,6 +44,27 @@ export interface LessonResource {
   type?: string;
 }
 
+export type GeneratedResourceType = 'LESSON_NOTES' | 'COMMAND_CHEATSHEET';
+export type GeneratedResourceStatus = 'QUEUED' | 'GENERATING' | 'READY' | 'FAILED';
+
+/** A generated PDF attached to a lesson (lesson notes or command cheat sheet). */
+export interface GeneratedLessonResource {
+  id: string;
+  lessonId: string;
+  resourceType: GeneratedResourceType;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  version: number;
+  status: GeneratedResourceStatus;
+  outdated: boolean;
+  generatedAt: string | null;
+  updatedAt: string;
+  error: string | null;
+  previewUrl: string;
+  downloadUrl: string;
+}
+
 export interface Lesson {
   id: string;
   courseId: string;

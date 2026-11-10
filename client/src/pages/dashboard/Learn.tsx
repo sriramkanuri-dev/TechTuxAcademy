@@ -7,6 +7,7 @@ import {
   Award,
   CheckCircle2,
   Clock,
+  Download,
   ExternalLink,
   FileText,
   GraduationCap,
@@ -14,10 +15,11 @@ import {
   Menu,
   PlayCircle,
   Sparkles,
+  Terminal,
   X,
 } from 'lucide-react';
-import { api, apiErrorMessage } from '@/lib/api';
-import type { Course, Enrollment, Lesson, Progress } from '@/lib/types';
+import { api, apiErrorMessage, apiFileUrl } from '@/lib/api';
+import type { Course, Enrollment, GeneratedLessonResource, Lesson, Progress } from '@/lib/types';
 import { cn, formatDuration } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -43,6 +45,17 @@ interface CompleteResponse {
   certificate: { certificateId: string; id: string } | null;
   message: string;
 }
+
+function formatFileSize(bytes: number): string {
+  if (!bytes) return 'PDF';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const RESOURCE_LABELS: Record<GeneratedLessonResource['resourceType'], string> = {
+  LESSON_NOTES: 'Lesson notes',
+  COMMAND_CHEATSHEET: 'Command cheat sheet',
+};
 
 export default function Learn() {
   const { slug = '' } = useParams();
@@ -73,6 +86,19 @@ export default function Learn() {
       lessons[0]
     );
   }, [lessons, requestedId, data?.lastLessonId]);
+
+  const { data: generatedResources = [] } = useQuery({
+    queryKey: ['lesson-resources', activeLesson?.id],
+    queryFn: async () => {
+      const { data } = await api.get<{ resources: GeneratedLessonResource[] }>(
+        `/resources/lesson/${activeLesson!.id}`
+      );
+      return data.resources;
+    },
+    enabled: Boolean(activeLesson?.id) && Boolean(data?.enrollment),
+  });
+
+  const readyResources = generatedResources.filter((resource) => resource.status === 'READY');
 
   const activeIndex = activeLesson ? lessons.findIndex((lesson) => lesson.id === activeLesson.id) : -1;
   const completedIds = useMemo(() => new Set(data?.progress?.completedLessonIds || []), [data?.progress]);
@@ -299,6 +325,67 @@ export default function Learn() {
                 {pick(activeLesson.description || '', activeLesson.descriptionTe) && (
                   <div className="prose-tech mt-6 rounded-2xl border border-line/10 bg-card p-5 text-sm">
                     <p>{pick(activeLesson.description || '', activeLesson.descriptionTe)}</p>
+                  </div>
+                )}
+
+                {readyResources.length > 0 && (
+                  <div className="mt-6 rounded-2xl border border-brand-400/25 bg-brand-500/5 p-5">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
+                      <Download className="h-4 w-4 text-brand-300" /> Downloadable lesson resources
+                    </h2>
+                    <p className="mt-1 text-xs text-muted">
+                      Generated PDFs for this lesson. Preview them in the browser or download for offline study.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {readyResources.map((resource) => (
+                        <div
+                          key={resource.id}
+                          className="flex flex-col justify-between gap-3 rounded-xl border border-line/10 bg-card p-4"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/12 text-brand-200">
+                              {resource.resourceType === 'COMMAND_CHEATSHEET' ? (
+                                <Terminal className="h-4 w-4" />
+                              ) : (
+                                <FileText className="h-4 w-4" />
+                              )}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-text">
+                                {RESOURCE_LABELS[resource.resourceType]}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-muted">
+                                {formatFileSize(resource.fileSize)} · v{resource.version}
+                                {resource.generatedAt
+                                  ? ` · ${new Date(resource.generatedAt).toLocaleDateString()}`
+                                  : ''}
+                              </p>
+                              {resource.outdated && (
+                                <p className="mt-1 text-[11px] font-medium text-amber-300">
+                                  An updated version is being prepared.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <a
+                              href={apiFileUrl(resource.previewUrl)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line/10 px-3 text-xs font-semibold text-text transition hover:border-brand-400/40 hover:text-brand-200"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" /> Preview
+                            </a>
+                            <a
+                              href={apiFileUrl(resource.downloadUrl)}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-500/15 px-3 text-xs font-semibold text-brand-200 transition hover:bg-brand-500/25"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Download
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 

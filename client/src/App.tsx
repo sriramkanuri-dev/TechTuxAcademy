@@ -44,6 +44,7 @@ const AdminCertificates = lazy(() => import('@/pages/admin/AdminCertificates'));
 const AdminCategories = lazy(() => import('@/pages/admin/AdminCategories'));
 const AdminWebsite = lazy(() => import('@/pages/admin/AdminWebsite'));
 const AdminAnalytics = lazy(() => import('@/pages/admin/AdminAnalytics'));
+const AdminResources = lazy(() => import('@/pages/admin/AdminResources'));
 
 export default function App() {
   return (
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="categories" element={<AdminCategories />} />
           <Route path="website" element={<AdminWebsite />} />
           <Route path="analytics" element={<AdminAnalytics />} />
+          <Route path="resources" element={<AdminResources />} />
         </Route>
       </Routes>
     </Suspense>
