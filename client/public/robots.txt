@@ -1,0 +1,11 @@
+# TechTuxAcademy — robots.txt (served statically by Cloudflare Pages)
+# `sitemap.xml` is generated at build time from the API (see
+# client/scripts/generate-sitemap.mjs).
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /api
+
+Sitemap: https://techtuxacademy.online/sitemap.xml

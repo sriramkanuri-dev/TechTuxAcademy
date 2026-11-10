@@ -448,6 +448,12 @@ for Workers, not Pages).
    `VITE_API_URL` in **Settings → Environment variables**; the client appends
    `/api` automatically. See `client/.env.example` for the template.
 
+7. **SEO files are static.** `client/public/robots.txt` is committed, and
+   `client/scripts/generate-sitemap.mjs` snapshots the API's `/sitemap.xml`
+   into `client/dist/sitemap.xml` at build time (falling back to the core public
+   routes if Render is unreachable). Do not add Pages Functions for these paths —
+   doing so previously prevented Pages from publishing new deployments.
+
 > **Custom domain:** `techtuxacademy.online` must be served by Cloudflare Pages
 > (or proxy to it). If the domain currently 301-redirects to
 > `techtuxacademy.pages.dev`, fix the redirect at the DNS/hosting provider
