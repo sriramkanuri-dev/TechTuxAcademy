@@ -13,9 +13,43 @@ function normalizeApiBase(value: string): string {
   return `${trimmed}/api`;
 }
 
-export const API_BASE = normalizeApiBase(
-  (import.meta.env.VITE_API_URL as string | undefined) || '/api'
-);
+function isAbsoluteHttp(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+function isSameOrigin(value: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return new URL(value, window.location.origin).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+const configured = ((import.meta.env.VITE_API_URL as string | undefined) || '').trim();
+const allowRemoteApi = (import.meta.env.VITE_ALLOW_REMOTE_API as string | undefined) === 'true';
+
+/**
+ * In this deployment the SPA is served by Cloudflare Pages, which proxies
+ * `/api` and `/uploads` to the Express API on the **same origin** (see
+ * `functions/_lib/proxy.js`). That proxy is the default and must stay the
+ * default:
+ *
+ *  - session cookies are host-only and `SameSite=Lax`, so a genuinely
+ *    cross-origin API would be treated as a third-party and lose its cookies
+ *    (login would appear to succeed and then immediately forget the session);
+ *  - a stale or unresolvable `VITE_API_URL` (for example an API subdomain with
+ *    no DNS record) must not take the entire site offline.
+ *
+ * A cross-origin `VITE_API_URL` is therefore ignored unless
+ * `VITE_ALLOW_REMOTE_API=true` explicitly opts in. Relative values such as
+ * `/api` and same-origin absolute URLs are always honoured.
+ */
+const useConfigured =
+  configured.length > 0 &&
+  (!isAbsoluteHttp(configured) || isSameOrigin(configured) || allowRemoteApi);
+
+export const API_BASE = normalizeApiBase(useConfigured ? configured : '/api');
 
 /** Origin used for files served outside the `/api` prefix (uploads, PDFs). */
 export const API_ORIGIN = API_BASE.replace(/\/api$/, '');

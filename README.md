@@ -442,11 +442,16 @@ for Workers, not Pages).
    }
    ```
 
-6. **No `VITE_API_URL` is required.** `client/src/lib/api.ts` defaults to the
-   relative base `/api`, which works on `techtuxacademy.online`, `www`, and the
-   `*.pages.dev` preview. If you later move the API to a different host, set
-   `VITE_API_URL` in **Settings → Environment variables**; the client appends
-   `/api` automatically. See `client/.env.example` for the template.
+6. **No `VITE_API_URL` is required, and a cross-origin one is ignored.** The
+   client defaults to the relative base `/api`, which works on
+   `techtuxacademy.online`, `www`, and the `*.pages.dev` preview. Because the
+   session cookie is host-only and `SameSite=Lax`, a cross-origin API would lose
+   its cookies and break login; a stale or unresolvable host would take the whole
+   site offline. `client/src/lib/api.ts` therefore honours `VITE_API_URL` only
+   when it is relative or same-origin, or when `VITE_ALLOW_REMOTE_API=true`
+   explicitly opts into a split deployment. Remove any `VITE_API_URL` set in
+   **Settings → Environment variables** if you do not need it. See
+   `client/.env.example` for the template.
 
 7. **SEO files are static.** `client/public/robots.txt` is committed, and
    `client/scripts/generate-sitemap.mjs` snapshots the API's `/sitemap.xml`
@@ -639,6 +644,7 @@ Lesson video URLs are YouTube IDs/URLs only; videos are embedded, never download
 | SPA routes 404 behind a proxy | Configure the proxy to fall back to `index.html` for non-API paths. |
 | `/api/health` returns the SPA HTML | The Pages Functions proxy is missing or `_routes.json` excludes `/api/*`. Ensure `functions/api/[[path]].js` is committed and the Pages build ran. |
 | Login succeeds but the session is not kept | With the same-origin proxy, set `COOKIE_DOMAIN` empty and `COOKIE_SAMESITE=lax`. A `Domain=.techtuxacademy.online` cookie is rejected on `*.pages.dev`. |
+| "Cannot reach the server" / `ERR_NAME_NOT_RESOLVED` | The build baked in a dead `VITE_API_URL`. The SPA now ignores cross-origin values unless `VITE_ALLOW_REMOTE_API=true`; remove the stale variable in Pages → Settings → Environment variables and redeploy. |
 | API works directly but not from the site | Check the Pages Function proxy origin (`functions/_lib/proxy.js`) and that `CORS_ORIGINS` includes the site/preview hosts. |
 | Site 301-redirects to `*.pages.dev` | Fix the DNS/hosting redirect (Hostinger) or attach the custom domain to the Cloudflare Pages project. |
 
